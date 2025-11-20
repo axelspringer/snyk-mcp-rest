@@ -1,6 +1,6 @@
 {
   "name": "snyk-mcp-rest",
-  "version": "1.0.0",
+  "version": "0.8.0",
   "description": "TypeScript client for Snyk API generated from OpenAPI spec",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
