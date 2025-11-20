@@ -322,6 +322,39 @@ MIT
 
 <https://github.com/spring-media/snyk-mcp-rest>
 
+## Releases
+
+This project uses automated GitHub Actions for versioned releases.
+
+### Creating a Release
+
+```bash
+# Update version in package.json (patch/minor/major)
+npm version patch  # 1.0.0 -> 1.0.1
+npm version minor  # 1.0.0 -> 1.1.0
+npm version major  # 1.0.0 -> 2.0.0
+
+# Push the version tag to trigger release workflow
+git push origin v1.0.1
+```
+
+The GitHub Actions workflow will automatically:
+
+- Run tests to ensure quality
+- Build the project
+- Create release archives (.tar.gz and .zip)
+- Generate changelog from commits
+- Publish GitHub release with assets
+
+### Release Artifacts
+
+Each release includes:
+
+- Built JavaScript and TypeScript declarations in `dist/`
+- Complete `package.json` for dependency management
+- Documentation and license files
+- Downloadable archives (.tar.gz and .zip)
+
 ## Contributing
 
 1. Make changes to custom code (not `src/generated/`)
