@@ -1,0 +1,45 @@
+{
+  "name": "snyk-mcp-rest",
+  "version": "1.0.0",
+  "description": "TypeScript client for Snyk API generated from OpenAPI spec",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "generate": "openapi-generator-cli generate",
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest --ui",
+    "prepare": "npm run generate && npm run build",
+    "mcp-server": "ts-node src/start-mcp-server.ts",
+    "mcp-server:build": "node dist/start-mcp-server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/spring-media/snyk-mcp-rest.git"
+  },
+  "keywords": [],
+  "author": "Paul Hackenberger (https://github.com/pkcpkc)",
+  "license": "MIT",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/spring-media/snyk-mcp-rest/issues"
+  },
+  "homepage": "https://github.com/spring-media/snyk-mcp-rest#readme",
+  "devDependencies": {
+    "@openapitools/openapi-generator-cli": "^2.25.2",
+    "@types/dotenv": "^6.1.1",
+    "@types/node": "^24.10.1",
+    "@vitest/coverage-v8": "^4.0.12",
+    "@vitest/ui": "^4.0.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.12"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "axios": "^1.13.2",
+    "dotenv": "^17.2.3"
+  }
+}

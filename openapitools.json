@@ -1,0 +1,29 @@
+{
+  "$schema": "node_modules/@openapitools/openapi-generator-cli/config.schema.json",
+  "spaces": 2,
+  "generator-cli": {
+    "version": "7.11.0",
+    "generators": {
+      "typescript-axios": {
+        "generatorName": "typescript-axios",
+        "output": "./src/generated",
+        "glob": "./res/snyk-openapi-2025-11-05.json",
+        "additionalProperties": {
+          "npmName": "@snyk/api-client",
+          "npmVersion": "1.0.0",
+          "supportsES6": true,
+          "withSeparateModelsAndApi": true,
+          "modelPackage": "models",
+          "apiPackage": "api",
+          "useSingleRequestParameter": true
+        },
+        "globalProperty": {
+          "skipValidateSpec": "true",
+          "debugOpenAPI": "false"
+        },
+        "importMappings": {},
+        "skipValidateSpec": true
+      }
+    }
+  }
+}
