@@ -19,7 +19,11 @@
         },
         "globalProperty": {
           "skipValidateSpec": "true",
-          "debugOpenAPI": "false"
+          "debugOpenAPI": "false",
+          "supportingFiles": "true"
+        },
+        "openapiNormalizer": {
+          "RESOLVE_EXTERNAL_REFS": "true"
         },
         "importMappings": {},
         "skipValidateSpec": true
