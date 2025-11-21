@@ -149,13 +149,17 @@ The `get-issue.ts` script requires:
 
 Add to your Claude Desktop config file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
+**Option 1: Using npx with ts-node (recommended for development)**
+
 ```json
 {
   "mcpServers": {
-    "snyk": {
-      "command": "node",
+    "snyk-rest-api": {
+      "command": "npx",
       "args": [
-        "/path/to/snyk-mcp-rest/dist/start-mcp-server.js"
+        "-y",
+        "ts-node",
+        "/absolute/path/to/snyk-mcp-rest/src/start-mcp-server.ts"
       ],
       "env": {
         "SNYK_API_KEY": "your-snyk-api-key-here",
@@ -166,6 +170,30 @@ Add to your Claude Desktop config file (`~/Library/Application Support/Claude/cl
   }
 }
 ```
+
+**Option 2: Using compiled JavaScript (recommended for production)**
+
+Build the project first with `npm run build`, then:
+
+```json
+{
+  "mcpServers": {
+    "snyk-rest-api": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/snyk-mcp-rest/dist/start-mcp-server.js"
+      ],
+      "env": {
+        "SNYK_API_KEY": "your-snyk-api-key-here",
+        "SNYK_ORG_ID": "your-org-id-uuid-here",
+        "SNYK_ORG_SLUG": "your-org-slug-here"
+      }
+    }
+  }
+}
+```
+
+**Important**: Replace `/absolute/path/to/snyk-mcp-rest` with the actual absolute path to your project directory (e.g., `/Users/yourname/Projects/snyk-mcp-rest`).
 
 #### Available MCP Tools
 

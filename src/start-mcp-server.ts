@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { createMCPServer } from './mcp-server.js';
+import { createMCPServer } from './mcp-server';
 import { config as loadEnv } from 'dotenv';
 
 // Load .env file when running locally

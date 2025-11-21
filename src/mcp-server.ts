@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { IssuesApi, ProjectsApi, Configuration } from './generated/index.js';
+import { IssuesApi, ProjectsApi, Configuration } from './generated';
 import { AxiosError } from 'axios';
 import { z } from 'zod';
 

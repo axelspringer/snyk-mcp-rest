@@ -19,8 +19,7 @@
         },
         "globalProperty": {
           "skipValidateSpec": "true",
-          "debugOpenAPI": "false",
-          "supportingFiles": "true"
+          "debugOpenAPI": "false"
         },
         "openapiNormalizer": {
           "RESOLVE_EXTERNAL_REFS": "true"
