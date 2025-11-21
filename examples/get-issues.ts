@@ -1,29 +1,37 @@
 #!/usr/bin/env node
 
 /**
- * Test-Skript für den Snyk MCP Server
+ * Test script for the Snyk MCP Server
  * 
- * Sendet eine Test-Anfrage an den MCP Server und zeigt die Antwort an.
- * Nützlich zum Testen ohne Claude Desktop.
+ * Sends a test request to the MCP server and displays the response.
+ * Useful for testing without Claude Desktop.
  * 
- * Usage: node test-mcp-server.js [repo-name] [status] [severity]
+ * Usage: npx ts-node examples/get-issues.ts [repo-name] [status] [severity]
  * 
  * Examples:
- *   node test-mcp-server.js                                    # All open issues
- *   node test-mcp-server.js owner/repo                         # Open issues for specific repo
- *   node test-mcp-server.js owner/repo resolved                # Resolved issues for repo
- *   node test-mcp-server.js owner/repo open critical           # Critical open issues for repo
- *   node test-mcp-server.js "" resolved high                   # All resolved high severity issues
+ *   npx ts-node examples/get-issues.ts                                    # All open issues
+ *   npx ts-node examples/get-issues.ts owner/repo                         # Open issues for specific repo
+ *   npx ts-node examples/get-issues.ts owner/repo resolved                # Resolved issues for repo
+ *   npx ts-node examples/get-issues.ts owner/repo open critical           # Critical open issues for repo
+ *   npx ts-node examples/get-issues.ts "" resolved high                   # All resolved high severity issues
  */
 
-const { spawn } = require('child_process');
-const path = require('path');
-require('dotenv').config();
+import { spawn } from 'child_process';
+import * as path from 'path';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
+
+interface RequestArguments {
+  repo?: string;
+  status: string;
+  severity?: string;
+}
 
 // Show usage information
-function showUsage() {
+function showUsage(): void {
   console.log(`
-📖 Usage: node test-mcp-server.js [repo] [status] [severity]
+📖 Usage: npx ts-node examples/get-issues.ts [repo] [status] [severity]
 
 Parameters:
   repo      Repository name (e.g., "owner/repo") or Project ID (UUID) - optional
@@ -31,22 +39,22 @@ Parameters:
   severity  Issue severity: low, medium, high, critical - optional
 
 Examples:
-  node test-mcp-server.js
+  npx ts-node examples/get-issues.ts
     → All open issues
 
-  node test-mcp-server.js owner/repo
+  npx ts-node examples/get-issues.ts owner/repo
     → Open issues for specific repository
 
-  node test-mcp-server.js owner/repo resolved
+  npx ts-node examples/get-issues.ts owner/repo resolved
     → Resolved issues for repository
 
-  node test-mcp-server.js owner/repo open critical
+  npx ts-node examples/get-issues.ts owner/repo open critical
     → Critical open issues for repository
 
-  node test-mcp-server.js "" resolved high
+  npx ts-node examples/get-issues.ts "" resolved high
     → All resolved high severity issues (empty string skips repo filter)
 
-  node test-mcp-server.js 12345678-1234-1234-1234-123456789012
+  npx ts-node examples/get-issues.ts 12345678-1234-1234-1234-123456789012
     → Open issues for project ID (UUID format)
 `);
   process.exit(0);
@@ -79,7 +87,9 @@ if (severity && !validSeverities.includes(severity)) {
 }
 
 // Build test request arguments
-const requestArguments = {};
+const requestArguments: RequestArguments = {
+  status: status || 'open' // Default status
+};
 
 if (repo && repo !== '') {
   requestArguments.repo = repo;
@@ -87,10 +97,7 @@ if (repo && repo !== '') {
 }
 
 if (status) {
-  requestArguments.status = status;
   console.log(`📊 Filtering by status: ${status}\n`);
-} else {
-  requestArguments.status = 'open'; // Default status
 }
 
 if (severity) {
@@ -98,7 +105,7 @@ if (severity) {
   console.log(`🔍 Filtering by severity: ${severity}\n`);
 }
 
-// Test-Request für get_issues
+// Test request for get_issues
 const testRequest = {
   jsonrpc: '2.0',
   id: 1,
@@ -109,13 +116,13 @@ const testRequest = {
   }
 };
 
-console.log('🚀 Starte MCP Server Test...\n');
-console.log('📨 Sende Request:');
+console.log('🚀 Starting MCP Server test...\n');
+console.log('📨 Sending request:');
 console.log(JSON.stringify(testRequest, null, 2));
-console.log('\n⏳ Warte auf Antwort...\n');
+console.log('\n⏳ Waiting for response...\n');
 
-// Starte den MCP Server
-const serverPath = path.join(__dirname, 'dist', 'start-mcp-server.js');
+// Start the MCP server
+const serverPath = path.join(__dirname, '..', 'dist', 'start-mcp-server.js');
 const server = spawn('node', [serverPath], {
   env: process.env
 });
@@ -123,32 +130,32 @@ const server = spawn('node', [serverPath], {
 let responseData = '';
 let errorData = '';
 
-server.stdout.on('data', (data) => {
+server.stdout.on('data', (data: Buffer) => {
   responseData += data.toString();
 });
 
-server.stderr.on('data', (data) => {
+server.stderr.on('data', (data: Buffer) => {
   errorData += data.toString();
 });
 
-// Sende den Test-Request nach kurzer Verzögerung
+// Send the test request after short delay
 setTimeout(() => {
   server.stdin.write(JSON.stringify(testRequest) + '\n');
 }, 1000);
 
-// Warte auf Antwort
+// Wait for response
 setTimeout(() => {
   if (responseData) {
-    console.log('✅ Antwort erhalten:\n');
+    console.log('✅ Response received:\n');
     
     try {
-      // Parse die MCP-Antwort
+      // Parse the MCP response
       const lines = responseData.trim().split('\n');
       const lastLine = lines[lines.length - 1];
       const mcpResponse = JSON.parse(lastLine);
       
-      // Extrahiere den Issue-Content
-      if (mcpResponse.result && mcpResponse.result.content && mcpResponse.result.content[0]) {
+      // Extract the issue content
+      if (mcpResponse.result?.content?.[0]) {
         const content = mcpResponse.result.content[0];
         if (content.type === 'text') {
           const issuesData = JSON.parse(content.text);
@@ -160,25 +167,25 @@ setTimeout(() => {
         console.log(JSON.stringify(mcpResponse, null, 2));
       }
     } catch (e) {
-      // Fallback: Zeige rohe Antwort
+      // Fallback: Show raw response
       console.log(responseData);
     }
   }
   
   if (errorData) {
-    console.log('\n⚠️  Server Output (stderr):');
+    console.log('\n⚠️  Server output (stderr):');
     console.log(errorData);
   }
   
   if (!responseData && !errorData) {
-    console.log('❌ Keine Antwort erhalten');
+    console.log('❌ No response received');
   }
   
   server.kill();
   process.exit(0);
 }, 5000);
 
-server.on('error', (error) => {
-  console.error('❌ Fehler beim Starten des Servers:', error);
+server.on('error', (error: Error) => {
+  console.error('❌ Error starting server:', error);
   process.exit(1);
 });

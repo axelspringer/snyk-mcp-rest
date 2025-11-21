@@ -11,12 +11,15 @@ import {
 
 describe('MCP Server Business Logic', () => {
   describe('getToolsSchema', () => {
-    it('should return tools schema with get_issues tool', () => {
+    it('should return tools schema with get_issues and get_issue tools', () => {
       const schema = getToolsSchema();
 
-      expect(schema.tools).toHaveLength(1);
+      expect(schema.tools).toHaveLength(2);
       expect(schema.tools[0].name).toBe('get_issues');
       expect(schema.tools[0].description).toContain('Snyk issues');
+      
+      expect(schema.tools[1].name).toBe('get_issue');
+      expect(schema.tools[1].description).toContain('detailed information');
       expect(schema.tools[0].inputSchema.properties).toHaveProperty('repo');
       expect(schema.tools[0].inputSchema.properties).toHaveProperty('status');
       expect(schema.tools[0].inputSchema.properties).toHaveProperty('severity');
@@ -27,15 +30,17 @@ describe('MCP Server Business Logic', () => {
       const schema = getToolsSchema();
       const statusProperty = schema.tools[0].inputSchema.properties.status;
 
-      expect(statusProperty.enum).toEqual(['open', 'resolved', 'ignored']);
-      expect(statusProperty.default).toBe('open');
+      expect(statusProperty).toBeDefined();
+      expect(statusProperty?.enum).toEqual(['open', 'resolved', 'ignored']);
+      expect(statusProperty?.default).toBe('open');
     });
 
     it('should define severity enum values correctly', () => {
       const schema = getToolsSchema();
       const severityProperty = schema.tools[0].inputSchema.properties.severity;
 
-      expect(severityProperty.enum).toEqual(['low', 'medium', 'high', 'critical']);
+      expect(severityProperty).toBeDefined();
+      expect(severityProperty?.enum).toEqual(['low', 'medium', 'high', 'critical']);
     });
   });
 

@@ -47,7 +47,20 @@ Key API classes available: `OrgsApi`, `ProjectsApi`, `IssuesApi`, `GroupsApi`, e
 
 ## Testing Requirements
 
-**Always run `npm test` after making changes** - this is a project requirement.
+**CRITICAL: After making code changes, always follow this workflow:**
+
+1. **Fix linting and syntax errors first**
+   - Run TypeScript compiler to check for syntax errors: `npx tsc --noEmit`
+   - Fix all TypeScript compilation errors before proceeding
+   - Ensure code passes linting rules
+   - Never proceed to testing with compilation errors
+
+2. **Run and fix tests**
+   - Run `npm test` after all syntax/linting errors are resolved
+   - Fix any failing tests
+   - Ensure all tests pass before considering the task complete
+
+**This is a strict project requirement - do not skip steps.**
 
 Test configuration (`vitest.config.ts`):
 - Test environment: Node.js

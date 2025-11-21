@@ -32,6 +32,20 @@ export function getToolsSchema() {
           required: [],
         },
       },
+      {
+        name: 'get_issue',
+        description: 'Retrieve detailed information about a specific Snyk issue by its UUID. Note: This requires the issue UUID (e.g., "4a18d42f-0706-4ad0-b127-24078731fbed"), NOT the issue key (e.g., "SNYK-JAVA-...").',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            issue_id: {
+              type: 'string',
+              description: 'The unique identifier (UUID format) of the issue to retrieve. This is the issue\'s `id` field from list_issues, not the issue `key`.',
+            },
+          },
+          required: ['issue_id'],
+        },
+      },
     ],
   };
 }
@@ -245,6 +259,114 @@ export async function handleGetIssues(
   }
 }
 
+// Business Logic: Get Issue Handler
+export async function handleGetIssue(
+  issuesApi: IssuesApi,
+  params: {
+    orgId?: string;
+    orgSlug?: string;
+    issue_id: string;
+  }
+) {
+  // Use environment variables as defaults
+  const orgId = params.orgId || process.env.SNYK_ORG_ID;
+  const orgSlug = params.orgSlug || process.env.SNYK_ORG_SLUG;
+  
+  console.error(`[handleGetIssue] orgId: ${orgId}, orgSlug: ${orgSlug}, issue_id: ${params.issue_id}`);
+  
+  if (!orgId) {
+    throw new Error('SNYK_ORG_ID must be set in environment variables or passed as parameter');
+  }
+  
+  if (!orgSlug) {
+    throw new Error('SNYK_ORG_SLUG must be set in environment variables or passed as parameter');
+  }
+
+  try {
+    console.error(`[handleGetIssue] Calling Snyk API: getOrgIssueByIssueID`);
+    
+    // Get detailed issue information
+    const response = await issuesApi.getOrgIssueByIssueID({
+      version: '2024-11-05',
+      orgId,
+      issueId: params.issue_id,
+    });
+
+    console.error(`[handleGetIssue] API response received, status: ${response.status}`);
+
+    const issue = response.data.data;
+    const attrs = issue?.attributes;
+    
+    if (!issue || !attrs) {
+      throw new Error(`Issue ${params.issue_id} not found`);
+    }
+
+    // Extract remediation and fix information from coordinates
+    const remedies = attrs.coordinates?.flatMap((coord: any) => 
+      coord.remedies?.map((remedy: any) => ({
+        type: remedy.type,
+        description: remedy.description,
+        details: remedy.details,
+      })) || []
+    ) || [];
+
+    // Extract upgrade recommendations
+    const upgrades = attrs.coordinates?.flatMap((coord: any) =>
+      coord.representations?.filter((rep: any) => rep.dependency).map((rep: any) => ({
+        package_name: rep.dependency?.package_name,
+        current_version: rep.dependency?.package_version,
+        recommended_version: rep.dependency?.fixed_in?.[0] || null,
+      })) || []
+    ) || [];
+
+    // Construct Snyk web URL
+    const scanItemId = issue.relationships?.scan_item?.data?.id;
+    const url = scanItemId 
+      ? `https://app.snyk.io/org/${orgSlug}/project/${scanItemId}#issue-${attrs.key}`
+      : null;
+
+    const detailedIssue = {
+      id: issue.id,
+      title: attrs.title,
+      description: attrs.problems?.[0]?.disclosed_at ? `Disclosed: ${attrs.problems[0].disclosed_at}` : null,
+      effective_severity_level: attrs.effective_severity_level,
+      status: attrs.status,
+      type: attrs.type,
+      created_at: attrs.created_at,
+      updated_at: attrs.updated_at,
+      key: attrs.key,
+      url,
+      
+      // Vulnerability details
+      problems: attrs.problems || [],
+      coordinates: attrs.coordinates || [],
+      
+      // Fix information
+      remedies,
+      upgrades,
+      
+      // References and additional info
+      classes: attrs.classes || [],
+    };
+
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(detailedIssue, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof AxiosError) {
+      throw new Error(
+        `Snyk API Error: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`
+      );
+    }
+    throw error;
+  }
+}
+
 // Business Logic: List Tools Handler
 export async function handleListTools() {
   return getToolsSchema();
@@ -261,17 +383,21 @@ export async function handleCallTool(
   },
   projectsApi?: ProjectsApi
 ) {
-  if (request.params.name !== 'get_issues') {
+  if (request.params.name === 'get_issues') {
+    const params = request.params.arguments as {
+      repo?: string;
+      status?: string;
+      severity?: string;
+    };
+    return handleGetIssues(issuesApi, params, projectsApi);
+  } else if (request.params.name === 'get_issue') {
+    const params = request.params.arguments as {
+      issue_id: string;
+    };
+    return handleGetIssue(issuesApi, params);
+  } else {
     throw new Error(`Unbekanntes Tool: ${request.params.name}`);
   }
-
-  const params = request.params.arguments as {
-    repo?: string;
-    status?: string;
-    severity?: string;
-  };
-
-  return handleGetIssues(issuesApi, params, projectsApi);
 }
 
 export function createMCPServer(apiKey?: string) {
@@ -321,6 +447,37 @@ export function createMCPServer(apiKey?: string) {
         const result = await handleGetIssues(issuesApi, params, projectsApi);
         return result;
       } catch (error) {
+        if (error instanceof Error) {
+          throw error;
+        }
+        throw new Error('Unknown error occurred');
+      }
+    }
+  );
+
+  // Define input schema for get_issue tool
+  const getIssueInputSchema = z.object({
+    issue_id: z.string().uuid().describe('The unique identifier (UUID) of the issue to retrieve. Must be in UUID format, not an issue key.'),
+  });
+
+  // Register the get_issue tool
+  server.registerTool(
+    'get_issue',
+    {
+      description: 'Retrieve detailed information about a specific Snyk issue by its UUID. Note: This requires the issue UUID (e.g., "4a18d42f-0706-4ad0-b127-24078731fbed"), NOT the issue key (e.g., "SNYK-JAVA-...").',
+      inputSchema: getIssueInputSchema,
+    },
+    async (args) => {
+      try {
+        console.error(`[get_issue] Retrieving issue: ${args.issue_id}`);
+        const params = {
+          issue_id: args.issue_id,
+        };
+        const result = await handleGetIssue(issuesApi, params);
+        console.error(`[get_issue] Successfully retrieved issue: ${args.issue_id}`);
+        return result;
+      } catch (error) {
+        console.error(`[get_issue] Error retrieving issue ${args.issue_id}:`, error);
         if (error instanceof Error) {
           throw error;
         }

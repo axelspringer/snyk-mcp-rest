@@ -13,13 +13,17 @@ import { AxiosError } from 'axios';
 
 describe('MCP Server Business Logic', () => {
   describe('getToolsSchema', () => {
-    it('should return tools schema with get_issues tool', () => {
+    it('should return tools schema with get_issues and get_issue tools', () => {
       const schema = getToolsSchema();
       
-      expect(schema.tools).toHaveLength(1);
+      expect(schema.tools).toHaveLength(2);
       expect(schema.tools[0].name).toBe('get_issues');
       expect(schema.tools[0].description).toBeTruthy();
       expect(schema.tools[0].inputSchema.required).toEqual([]);
+      
+      expect(schema.tools[1].name).toBe('get_issue');
+      expect(schema.tools[1].description).toContain('detailed information');
+      expect(schema.tools[1].inputSchema.required).toEqual(['issue_id']);
     });
 
     it('should define all expected properties in schema', () => {
@@ -35,8 +39,10 @@ describe('MCP Server Business Logic', () => {
       const schema = getToolsSchema();
       const properties = schema.tools[0].inputSchema.properties;
       
-      expect(properties.status.enum).toEqual(['open', 'resolved', 'ignored']);
-      expect(properties.severity.enum).toEqual(['low', 'medium', 'high', 'critical']);
+      expect(properties.status).toBeDefined();
+      expect(properties.status?.enum).toEqual(['open', 'resolved', 'ignored']);
+      expect(properties.severity).toBeDefined();
+      expect(properties.severity?.enum).toEqual(['low', 'medium', 'high', 'critical']);
     });
   });
 
@@ -305,8 +311,9 @@ describe('MCP Server Business Logic', () => {
     it('should return tools schema', async () => {
       const result = await handleListTools();
       
-      expect(result.tools).toHaveLength(1);
+      expect(result.tools).toHaveLength(2);
       expect(result.tools[0].name).toBe('get_issues');
+      expect(result.tools[1].name).toBe('get_issue');
     });
   });
 

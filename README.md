@@ -106,28 +106,44 @@ npm run mcp-server:build
 
 #### Testing the MCP Server
 
-Test the MCP server without Claude Desktop using the provided test script:
+Test the MCP server without Claude Desktop using the provided test scripts:
+
+**Testing get_issues tool:**
 
 ```bash
 # Build the project first
 npm run build
 
-# Run the test script
-node examples/test-mcp-server.js [repo] [status] [severity]
+# Run the get_issues test script
+npx ts-node examples/get-issues.ts [repo] [status] [severity]
 
 # Examples:
-node examples/test-mcp-server.js                              # All open issues
-node examples/test-mcp-server.js owner/repo                   # Open issues for specific repo
-node examples/test-mcp-server.js owner/repo resolved          # Resolved issues for repo
-node examples/test-mcp-server.js owner/repo open critical     # Critical open issues
-node examples/test-mcp-server.js "" resolved high             # All resolved high severity issues
+npx ts-node examples/get-issues.ts                              # All open issues
+npx ts-node examples/get-issues.ts owner/repo                   # Open issues for specific repo
+npx ts-node examples/get-issues.ts owner/repo resolved          # Resolved issues for repo
+npx ts-node examples/get-issues.ts owner/repo open critical     # Critical open issues
+npx ts-node examples/get-issues.ts "" resolved high             # All resolved high severity issues
 ```
 
-The test script accepts the same parameters as the `get_issues` MCP tool:
+The `get-issues.ts` script accepts the same parameters as the `get_issues` MCP tool:
 
 - `repo` - Repository name or Project ID (optional)
 - `status` - Issue status: open, resolved, ignored (optional, default: open)
 - `severity` - Issue severity: low, medium, high, critical (optional)
+
+**Testing get_issue tool:**
+
+```bash
+# Get detailed information about a specific issue
+npx ts-node examples/get-issue.ts <issue-id>
+
+# Example:
+npx ts-node examples/get-issue.ts 12345678-1234-1234-1234-123456789012
+```
+
+The `get-issue.ts` script requires:
+
+- `issue_id` - The unique identifier (UUID) of the issue to retrieve (required)
 
 #### Claude Desktop Configuration
 
@@ -167,6 +183,14 @@ Add to your Claude Desktop config file (`~/Library/Application Support/Claude/cl
   - **Repository Name Filtering**: The `repo` parameter accepts repository names (e.g., `"spring-media/my-repo"`). The server automatically resolves these to project IDs via the Projects API.
   - **Project Name Resolution**: Issues include the actual project/repository name instead of just the project ID. The server fetches project names for all unique projects in the results.
   - **UUID Support**: Project IDs in UUID format (e.g., `"12345678-1234-1234-1234-123456789012"`) are used directly without lookup.
+
+- **get_issue** - Retrieve detailed information about a specific Snyk issue
+  - Parameters:
+    - `issue_id` (required): The unique identifier (UUID) of the issue to retrieve
+  - Configuration (via environment variables):
+    - `SNYK_ORG_ID` (required): Snyk Organization ID (UUID)
+    - `SNYK_ORG_SLUG` (required): Organization slug for URLs
+  - Returns: Detailed issue information including suggested fixes, remediation advice, vulnerability details, upgrade recommendations, and references
 
 ## Available APIs
 
@@ -243,8 +267,9 @@ src/
 ├── mcp-server.ts      # MCP server business logic (testable)
 └── start-mcp-server.ts # MCP server startup script (standalone)
 examples/
-├── basic-usage.ts         # Basic API client usage example
-└── test-mcp-server.js     # Manual MCP server testing script
+├── basic-usage.ts     # Basic API client usage example
+├── get-issues.ts      # MCP server testing script (get_issues tool)
+└── get-issue.ts       # MCP server testing script (get_issue tool)
 tests/
 ├── api.test.ts                    # API client tests (18 tests)
 ├── mcp-server.test.ts             # MCP server integration tests (8 tests)
