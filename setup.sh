@@ -28,6 +28,29 @@ NPM_VERSION=$(npm -v)
 echo "✓ npm version: $NPM_VERSION"
 echo ""
 
+# Download OpenAPI specification
+OPENAPI_URL="https://api.snyk.io/rest/openapi/2025-11-05"
+echo "📥 Downloading latest OpenAPI specification from Snyk API ($OPENAPI_URL)..."
+OPENAPI_FILE="res/snyk-openapi.json"
+
+# Create res directory if it doesn't exist
+mkdir -p res
+
+# Download the OpenAPI spec
+if command -v curl &> /dev/null; then
+    curl -sSL "$OPENAPI_URL" -o "$OPENAPI_FILE"
+    echo "✓ Downloaded OpenAPI spec to $OPENAPI_FILE"
+elif command -v wget &> /dev/null; then
+    wget -q "$OPENAPI_URL" -O "$OPENAPI_FILE"
+    echo "✓ Downloaded OpenAPI spec to $OPENAPI_FILE"
+else
+    echo "❌ Error: Neither curl nor wget is installed."
+    echo "Please install curl or wget to download the OpenAPI specification."
+    exit 1
+fi
+
+echo ""
+
 # Install dependencies
 echo "📦 Installing dependencies..."
 npm install

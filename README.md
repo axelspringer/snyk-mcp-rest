@@ -115,19 +115,19 @@ Test the MCP server without Claude Desktop using the provided test scripts:
 npm run build
 
 # Run the get_issues test script
-npx ts-node examples/get-issues.ts [repo] [status] [severity]
+npx ts-node examples/get-issues.ts [project-id] [status] [severity]
 
 # Examples:
-npx ts-node examples/get-issues.ts                              # All open issues
-npx ts-node examples/get-issues.ts owner/repo                   # Open issues for specific repo
-npx ts-node examples/get-issues.ts owner/repo resolved          # Resolved issues for repo
-npx ts-node examples/get-issues.ts owner/repo open critical     # Critical open issues
-npx ts-node examples/get-issues.ts "" resolved high             # All resolved high severity issues
+npx ts-node examples/get-issues.ts                                          # All open issues
+npx ts-node examples/get-issues.ts 12345678-1234-1234-1234-123456789012    # Open issues for specific project
+npx ts-node examples/get-issues.ts 12345678-1234-1234-1234-123456789012 resolved  # Resolved issues for project
+npx ts-node examples/get-issues.ts 12345678-1234-1234-1234-123456789012 open critical  # Critical open issues
+npx ts-node examples/get-issues.ts "" resolved high                         # All resolved high severity issues
 ```
 
 The `get-issues.ts` script accepts the same parameters as the `get_issues` MCP tool:
 
-- `repo` - Repository name or Project ID (optional)
+- `projectId` - Project ID in UUID format (optional)
 - `status` - Issue status: open, resolved, ignored (optional, default: open)
 - `severity` - Issue severity: low, medium, high, critical (optional)
 
@@ -159,7 +159,7 @@ Add to your Claude Desktop config file (`~/Library/Application Support/Claude/cl
       "args": [
         "-y",
         "ts-node",
-        "/absolute/path/to/snyk-mcp-rest/src/start-mcp-server.ts"
+        "/absolute/path/to/snyk-mcp-rest/src/mcp-server.ts"
       ],
       "env": {
         "SNYK_API_KEY": "your-snyk-api-key-here",
@@ -181,7 +181,7 @@ Build the project first with `npm run build`, then:
     "snyk-rest-api": {
       "command": "node",
       "args": [
-        "/absolute/path/to/snyk-mcp-rest/dist/start-mcp-server.js"
+        "/absolute/path/to/snyk-mcp-rest/dist/mcp-server.js"
       ],
       "env": {
         "SNYK_API_KEY": "your-snyk-api-key-here",
@@ -197,20 +197,27 @@ Build the project first with `npm run build`, then:
 
 #### Available MCP Tools
 
-- **get_issues** - Retrieve Snyk security issues for an organization
+- **get_issues** - Retrieve Snyk security issues for an organization and project
   - Parameters:
-    - `repo` (optional): Repository name (e.g., `"owner/repo"`) or Project ID (UUID format). Repository names are automatically resolved to matching project IDs.
+    - `projectId` (optional): Project ID in UUID format (e.g., `"12345678-1234-1234-1234-123456789012"`).
     - `status` (optional): Filter by status (`open`, `resolved`, `ignored`)
     - `severity` (optional): Filter by severity (`low`, `medium`, `high`, `critical`)
   - Configuration (via environment variables):
     - `SNYK_ORG_ID` (required): Snyk Organization ID (UUID)
     - `SNYK_ORG_SLUG` (required): Organization slug for URLs
-  - Returns: Formatted issues with direct Snyk URLs and resolved project names
+  - Returns: Formatted issues with direct Snyk URLs. The `repository` field will be `null` unless explicitly provided by specialized tools like `get_repo_issues`
   
-  **Features**:
-  - **Repository Name Filtering**: The `repo` parameter accepts repository names (e.g., `"spring-media/my-repo"`). The server automatically resolves these to project IDs via the Projects API.
-  - **Project Name Resolution**: Issues include the actual project/repository name instead of just the project ID. The server fetches project names for all unique projects in the results.
-  - **UUID Support**: Project IDs in UUID format (e.g., `"12345678-1234-1234-1234-123456789012"`) are used directly without lookup.
+  **Note**: The `projectId` parameter must be in UUID format. To find the Project ID for a repository:
+  
+  ```typescript
+  const projectsApi = new ProjectsApi(config);
+  const projects = await projectsApi.listOrgProjects({
+    version: '2024-11-05',
+    orgId: 'your-org-id',
+    names: ['owner/my-repo']
+  });
+  const projectId = projects.data.data?.[0]?.id;
+  ```
 
 - **get_issue** - Retrieve detailed information about a specific Snyk issue
   - Parameters:
@@ -272,16 +279,15 @@ npm run test:ui
 
 - **API Client Tests** (`tests/api.test.ts`) - Configuration, API instantiation, exports (18 tests)
 - **MCP Server Tests** (`tests/mcp-server.test.ts`) - Issue retrieval, filtering, pagination, project name fetching (9 tests)
-- **MCP Server Logic Tests** (`tests/mcp-server-logic.test.ts`) - Handler functions, tool schema (20 tests)
-- **MCP Business Logic Tests** (`tests/mcp-business-logic.test.ts`) - Issue formatting, response handling (24 tests)
-- **Repository Name Filtering Tests** (`tests/repo-name-filtering.test.ts`) - Project name resolution, UUID detection (9 tests)
+- **MCP Server Logic Tests** (`tests/mcp-server-logic.test.ts`) - Handler functions, tool schema (21 tests)
+- **MCP Business Logic Tests** (`tests/mcp-business-logic.test.ts`) - Issue formatting, response handling (25 tests)
 - **Integration Tests** (`tests/integration.test.ts`) - Multi-API workflows, pagination handling (7 tests)
 - **Error Handling Tests** (`tests/error-handling.test.ts`) - HTTP errors, network failures, validation (8 tests)
 - **Index Exports Tests** (`tests/index.test.ts`) - Module exports and type definitions (14 tests)
 
-**Test Statistics**: 109 test cases across 8 test files covering core functionality, error scenarios, and edge cases.
+**Test Statistics**: 102 test cases across 7 test files covering core functionality, error scenarios, and edge cases.
 
-**Coverage**: 93%+ overall code coverage (100% for `src/index.ts`, 93%+ for `src/mcp-server.ts`). Generated code (`src/generated/**`) and server startup code (`src/start-mcp-server.ts`) are excluded from coverage as per project policy.
+**Coverage**: 93%+ overall code coverage (100% for `src/index.ts`, 93%+ for `src/mcp-server.ts`). Generated code (`src/generated/**`) is excluded from coverage as per project policy.
 
 ### Project Structure
 
@@ -292,18 +298,26 @@ src/
 │   ├── models/        # TypeScript interfaces
 │   └── configuration.ts, base.ts, common.ts
 ├── index.ts           # Main entry point - API client exports
-├── mcp-server.ts      # MCP server business logic (testable)
-└── start-mcp-server.ts # MCP server startup script (standalone)
+├── mcp-server.ts      # MCP server (business logic + startup script)
+└── tools/             # MCP tool implementations
+    ├── index.ts       # Tool registry
+    ├── types.ts       # Tool type definitions
+    ├── utils.ts       # Shared utilities
+    ├── get-issues.ts  # get_issues tool
+    ├── get-issue.ts   # get_issue tool
+    ├── get-repo-issues.ts  # get_repo_issues tool
+    └── find-projects.ts    # find_projects tool
 examples/
 ├── basic-usage.ts     # Basic API client usage example
 ├── get-issues.ts      # MCP server testing script (get_issues tool)
-└── get-issue.ts       # MCP server testing script (get_issue tool)
+├── get-issue.ts       # MCP server testing script (get_issue tool)
+├── get-repo-issues.ts # MCP server testing script (get_repo_issues tool)
+└── find-projects.ts   # MCP server testing script (find_projects tool)
 tests/
 ├── api.test.ts                    # API client tests (18 tests)
-├── mcp-server.test.ts             # MCP server integration tests (8 tests)
-├── mcp-server-logic.test.ts       # MCP handler functions (20 tests)
-├── mcp-business-logic.test.ts     # Issue formatting logic (24 tests)
-├── repo-name-filtering.test.ts    # Repository name resolution (9 tests)
+├── mcp-server.test.ts             # MCP server integration tests (9 tests)
+├── mcp-server-logic.test.ts       # MCP handler functions (21 tests)
+├── mcp-business-logic.test.ts     # Issue formatting logic (25 tests)
 ├── integration.test.ts            # Multi-API workflows (7 tests)
 ├── error-handling.test.ts         # Error scenarios (8 tests)
 └── index.test.ts                  # Module exports (14 tests)
@@ -373,40 +387,7 @@ MIT
 
 ## Repository
 
-<https://github.com/spring-media/snyk-mcp-rest>
-
-## Releases
-
-This project uses automated GitHub Actions for versioned releases.
-
-### Creating a Release
-
-```bash
-# Update version in package.json (patch/minor/major)
-npm version patch  # 1.0.0 -> 1.0.1
-npm version minor  # 1.0.0 -> 1.1.0
-npm version major  # 1.0.0 -> 2.0.0
-
-# Push the version tag to trigger release workflow
-git push origin v1.0.1
-```
-
-The GitHub Actions workflow will automatically:
-
-- Run tests to ensure quality
-- Build the project
-- Create release archives (.tar.gz and .zip)
-- Generate changelog from commits
-- Publish GitHub release with assets
-
-### Release Artifacts
-
-Each release includes:
-
-- Built JavaScript and TypeScript declarations in `dist/`
-- Complete `package.json` for dependency management
-- Documentation and license files
-- Downloadable archives (.tar.gz and .zip)
+<https://github.com/axelspringer/snyk-mcp-rest>
 
 ## Contributing
 

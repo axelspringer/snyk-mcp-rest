@@ -7,7 +7,7 @@
       "typescript-axios": {
         "generatorName": "typescript-axios",
         "output": "./src/generated",
-        "glob": "./res/snyk-openapi-2025-11-05.json",
+        "glob": "./res/snyk-openapi.json",
         "additionalProperties": {
           "npmName": "@snyk/api-client",
           "npmVersion": "1.0.0",

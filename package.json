@@ -5,28 +5,28 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "generate": "openapi-generator-cli generate",
+    "generate": "openapi-generator-cli generate >/dev/null 2>&1 && echo '✅ Code generation completed successfully' || (echo '❌ Code generation failed' && exit 1)",
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
     "prepare": "npm run generate && npm run build",
-    "mcp-server": "ts-node src/start-mcp-server.ts",
-    "mcp-server:build": "node dist/start-mcp-server.js"
+    "mcp-server": "ts-node src/mcp-server.ts",
+    "mcp-server:build": "node dist/mcp-server.js"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/spring-media/snyk-mcp-rest.git"
+    "url": "git+https://github.com/axelspringer/snyk-mcp-rest.git"
   },
   "keywords": [],
   "author": "Paul Hackenberger (https://github.com/pkcpkc)",
   "license": "MIT",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/spring-media/snyk-mcp-rest/issues"
+    "url": "https://github.com/axelspringer/snyk-mcp-rest/issues"
   },
-  "homepage": "https://github.com/spring-media/snyk-mcp-rest#readme",
+  "homepage": "https://github.com/axelspringer/snyk-mcp-rest#readme",
   "devDependencies": {
     "@openapitools/openapi-generator-cli": "^2.25.2",
     "@types/dotenv": "^6.1.1",
@@ -40,6 +40,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.22.0",
     "axios": "^1.13.2",
-    "dotenv": "^17.2.3"
+    "dotenv": "^17.2.3",
+    "zod-to-json-schema": "^3.25.0"
   }
 }

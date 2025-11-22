@@ -1,405 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { IssuesApi, ProjectsApi, Configuration } from './generated';
-import { AxiosError } from 'axios';
-import { z } from 'zod';
+import { allTools } from './tools';
 
-// Business Logic: Tool Schema Definition
-export function getToolsSchema() {
-  return {
-    tools: [
-      {
-        name: 'get_issues',
-        description: 'Retrieve Snyk issues for an organization and repository. Supports filtering by repository name or project ID.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            repo: {
-              type: 'string',
-              description: 'Repository name (e.g., "owner/repo") or Project ID (UUID format). If a repository name is provided, it will be resolved to matching project IDs.',
-            },
-            status: {
-              type: 'string',
-              enum: ['open', 'resolved', 'ignored'],
-              description: 'Issue status filter',
-              default: 'open',
-            },
-            severity: {
-              type: 'string',
-              enum: ['low', 'medium', 'high', 'critical'],
-              description: 'Issue severity filter (optional)',
-            },
-          },
-          required: [],
-        },
-      },
-      {
-        name: 'get_issue',
-        description: 'Retrieve detailed information about a specific Snyk issue by its UUID. Note: This requires the issue UUID (e.g., "4a18d42f-0706-4ad0-b127-24078731fbed"), NOT the issue key (e.g., "SNYK-JAVA-...").',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            issue_id: {
-              type: 'string',
-              description: 'The unique identifier (UUID format) of the issue to retrieve. This is the issue\'s `id` field from list_issues, not the issue `key`.',
-            },
-          },
-          required: ['issue_id'],
-        },
-      },
-    ],
-  };
-}
-
-// Business Logic: Issue Formatting
-export function formatIssue(issue: any, orgSlug: string, repositoryName?: string) {
-  const issueId = issue.id;
-  const attrs = issue.attributes;
-  
-  // Snyk Web-Link konstruieren
-  const url = `https://app.snyk.io/org/${orgSlug}/project/${issue.relationships?.scan_item?.data.id}#issue-${attrs.key}`;
-
-  // Extract repository information from scan_item relationship
-  const repositoryId = issue.relationships?.scan_item?.data?.id || null;
-  
-  // Extract file locations from coordinates (for code issues) or problems
-  const locations = attrs.coordinates?.[0]?.representations
-    ?.filter((rep: any) => rep.sourceLocation)
-    .map((rep: any) => ({
-      filepath: rep.sourceLocation?.file || null,
-      line: rep.sourceLocation?.region?.start?.line || null,
-      column: rep.sourceLocation?.region?.start?.column || null,
-    })) || [];
-
-  // Extract dependency information from coordinates
-  const dependencies = attrs.coordinates?.[0]?.representations
-    ?.filter((rep: any) => rep.dependency)
-    .map((rep: any) => ({
-      package_name: rep.dependency?.package_name || null,
-      package_version: rep.dependency?.package_version || null,
-    })) || [];
-
-  return {
-    id: issueId,
-    title: attrs.title,
-    effective_severity_level: attrs.effective_severity_level,
-    status: attrs.status,
-    type: attrs.type,
-    created_at: attrs.created_at,
-    updated_at: attrs.updated_at,
-    ignored: attrs.ignored,
-    key: attrs.key,
-    repository: repositoryName || repositoryId,
-    repository_id: repositoryId,
-    locations: locations,
-    dependencies: dependencies,
-    problems: attrs.problems || [],
-    coordinates: attrs.coordinates || [],
-    url: url,
-    scan_item_id: issue.relationships?.scan_item?.data.id,
-  };
-}
-
-// Business Logic: Response Formatting
-export function formatIssuesResponse(issues: any[], hasMore: boolean) {
-  return {
-    content: [
-      {
-        type: 'text' as const,
-        text: JSON.stringify(
-          {
-            total: issues.length,
-            count: issues.length,
-            issues,
-            has_more: hasMore,
-          },
-          null,
-          2
-        ),
-      },
-    ],
-  };
-}
-
-// Business Logic: Map Repository Name to Project IDs
-export async function findProjectIdsByRepoName(
-  projectsApi: ProjectsApi,
-  orgId: string,
-  repoName: string
-): Promise<string[]> {
-  try {
-    const response = await projectsApi.listOrgProjects({
-      version: '2024-11-05',
-      orgId,
-      names: [repoName],
-    });
-
-    const projects = response.data.data || [];
-    return projects.map(project => project.id).filter((id): id is string => !!id);
-  } catch (error) {
-    if (error instanceof AxiosError) {
-      throw new Error(
-        `Failed to find projects by name "${repoName}": ${error.response?.status} - ${JSON.stringify(error.response?.data)}`
-      );
-    }
-    throw error;
-  }
-}
-
-// Business Logic: Get Issues Handler
-export async function handleGetIssues(
-  issuesApi: IssuesApi,
-  params: {
-    orgId?: string;
-    orgSlug?: string;
-    repo?: string;
-    status?: string;
-    severity?: string;
-  },
-  projectsApi?: ProjectsApi
-) {
-  const { repo, status = 'open', severity } = params;
-  
-  // Use environment variables as defaults
-  const orgId = params.orgId || process.env.SNYK_ORG_ID;
-  const orgSlug = params.orgSlug || process.env.SNYK_ORG_SLUG;
-  
-  if (!orgId) {
-    throw new Error('SNYK_ORG_ID must be set in environment variables or passed as parameter');
-  }
-  
-  if (!orgSlug) {
-    throw new Error('SNYK_ORG_SLUG must be set in environment variables or passed as parameter');
-  }
-
-  try {
-    // If repo is provided and it's not a UUID (i.e., it's a repository name), resolve to project IDs
-    let scanItemIds: string[] | undefined;
-    if (repo) {
-      // Check if repo looks like a UUID (project ID)
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(repo);
-      
-      if (isUuid) {
-        // It's already a project ID
-        scanItemIds = [repo];
-      } else if (projectsApi) {
-        // It's a repository name - resolve to project IDs
-        scanItemIds = await findProjectIdsByRepoName(projectsApi, orgId, repo);
-        
-        if (scanItemIds.length === 0) {
-          // No projects found with this name - return empty result
-          return formatIssuesResponse([], false);
-        }
-      } else {
-        throw new Error('ProjectsApi is required to filter by repository name');
-      }
-    }
-
-    // Issues von Snyk API abrufen
-    const response = await issuesApi.listOrgIssues({
-      version: '2024-11-05',
-      orgId,
-      status: [status] as Array<'open' | 'resolved'>,
-      ...(severity && { effectiveSeverityLevel: [severity] as Array<'low' | 'medium' | 'high' | 'critical'> }),
-      ...(scanItemIds && scanItemIds.length > 0 && { 
-        scanItemId: scanItemIds[0], // Use first project ID for now (API limitation)
-        scanItemType: 'project' as any
-      }),
-      limit: 100,
-    });
-
-    const issues = response.data.data || [];
-
-    // Collect unique project IDs and fetch their names
-    const projectCache = new Map<string, string>();
-    if (projectsApi && issues.length > 0) {
-      const projectIds = [...new Set(
-        issues
-          .map(issue => issue.relationships?.scan_item?.data?.id)
-          .filter((id): id is string => !!id)
-      )];
-
-      await Promise.all(
-        projectIds.map(async (projectId) => {
-          try {
-            const projectResponse = await projectsApi.getOrgProject({
-              orgId,
-              projectId,
-              version: '2024-11-05',
-            });
-            const projectName = projectResponse.data.data?.attributes?.name;
-            if (projectName) {
-              projectCache.set(projectId, projectName);
-            }
-          } catch (error) {
-            // If we can't fetch the project name, just use the ID
-            console.error(`Failed to fetch project name for ${projectId}:`, error);
-          }
-        })
-      );
-    }
-
-    // Issues formatieren mit Web-Links und Project Names
-    const formattedIssues = issues.map((issue) => {
-      const projectId = issue.relationships?.scan_item?.data?.id;
-      const repositoryName = projectId && projectCache.has(projectId)
-        ? projectCache.get(projectId)!
-        : projectId || null;
-      
-      return formatIssue(issue, orgSlug, repositoryName);
-    });
-
-    return formatIssuesResponse(formattedIssues, !!response.data.links?.next);
-  } catch (error) {
-    if (error instanceof AxiosError) {
-      throw new Error(
-        `Snyk API Fehler: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`
-      );
-    }
-    throw error;
-  }
-}
-
-// Business Logic: Get Issue Handler
-export async function handleGetIssue(
-  issuesApi: IssuesApi,
-  params: {
-    orgId?: string;
-    orgSlug?: string;
-    issue_id: string;
-  }
-) {
-  // Use environment variables as defaults
-  const orgId = params.orgId || process.env.SNYK_ORG_ID;
-  const orgSlug = params.orgSlug || process.env.SNYK_ORG_SLUG;
-  
-  console.error(`[handleGetIssue] orgId: ${orgId}, orgSlug: ${orgSlug}, issue_id: ${params.issue_id}`);
-  
-  if (!orgId) {
-    throw new Error('SNYK_ORG_ID must be set in environment variables or passed as parameter');
-  }
-  
-  if (!orgSlug) {
-    throw new Error('SNYK_ORG_SLUG must be set in environment variables or passed as parameter');
-  }
-
-  try {
-    console.error(`[handleGetIssue] Calling Snyk API: getOrgIssueByIssueID`);
-    
-    // Get detailed issue information
-    const response = await issuesApi.getOrgIssueByIssueID({
-      version: '2024-11-05',
-      orgId,
-      issueId: params.issue_id,
-    });
-
-    console.error(`[handleGetIssue] API response received, status: ${response.status}`);
-
-    const issue = response.data.data;
-    const attrs = issue?.attributes;
-    
-    if (!issue || !attrs) {
-      throw new Error(`Issue ${params.issue_id} not found`);
-    }
-
-    // Extract remediation and fix information from coordinates
-    const remedies = attrs.coordinates?.flatMap((coord: any) => 
-      coord.remedies?.map((remedy: any) => ({
-        type: remedy.type,
-        description: remedy.description,
-        details: remedy.details,
-      })) || []
-    ) || [];
-
-    // Extract upgrade recommendations
-    const upgrades = attrs.coordinates?.flatMap((coord: any) =>
-      coord.representations?.filter((rep: any) => rep.dependency).map((rep: any) => ({
-        package_name: rep.dependency?.package_name,
-        current_version: rep.dependency?.package_version,
-        recommended_version: rep.dependency?.fixed_in?.[0] || null,
-      })) || []
-    ) || [];
-
-    // Construct Snyk web URL
-    const scanItemId = issue.relationships?.scan_item?.data?.id;
-    const url = scanItemId 
-      ? `https://app.snyk.io/org/${orgSlug}/project/${scanItemId}#issue-${attrs.key}`
-      : null;
-
-    const detailedIssue = {
-      id: issue.id,
-      title: attrs.title,
-      description: attrs.problems?.[0]?.disclosed_at ? `Disclosed: ${attrs.problems[0].disclosed_at}` : null,
-      effective_severity_level: attrs.effective_severity_level,
-      status: attrs.status,
-      type: attrs.type,
-      created_at: attrs.created_at,
-      updated_at: attrs.updated_at,
-      key: attrs.key,
-      url,
-      
-      // Vulnerability details
-      problems: attrs.problems || [],
-      coordinates: attrs.coordinates || [],
-      
-      // Fix information
-      remedies,
-      upgrades,
-      
-      // References and additional info
-      classes: attrs.classes || [],
-    };
-
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: JSON.stringify(detailedIssue, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    if (error instanceof AxiosError) {
-      throw new Error(
-        `Snyk API Error: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`
-      );
-    }
-    throw error;
-  }
-}
-
-// Business Logic: List Tools Handler
-export async function handleListTools() {
-  return getToolsSchema();
-}
-
-// Business Logic: Call Tool Handler
-export async function handleCallTool(
-  issuesApi: IssuesApi,
-  request: {
-    params: {
-      name: string;
-      arguments?: any;
-    };
-  },
-  projectsApi?: ProjectsApi
-) {
-  if (request.params.name === 'get_issues') {
-    const params = request.params.arguments as {
-      repo?: string;
-      status?: string;
-      severity?: string;
-    };
-    return handleGetIssues(issuesApi, params, projectsApi);
-  } else if (request.params.name === 'get_issue') {
-    const params = request.params.arguments as {
-      issue_id: string;
-    };
-    return handleGetIssue(issuesApi, params);
-  } else {
-    throw new Error(`Unbekanntes Tool: ${request.params.name}`);
-  }
-}
-
+/**
+ * Create MCP Server with all registered tools
+ */
 export function createMCPServer(apiKey?: string) {
   // Snyk API Configuration
   const config = new Configuration({
@@ -423,68 +28,54 @@ export function createMCPServer(apiKey?: string) {
     }
   );
 
-  // Define input schema for get_issues tool
-  const getIssuesInputSchema = z.object({
-    repo: z.string().optional().describe('Repository name (e.g., "owner/repo") or Project ID (UUID). Repository names are automatically resolved to project IDs.'),
-    status: z.enum(['open', 'resolved', 'ignored']).optional().default('open').describe('Issue Status Filter'),
-    severity: z.enum(['low', 'medium', 'high', 'critical']).optional().describe('Issue Severity Filter (optional)'),
-  });
-
-  // Register the get_issues tool using the new API
-  server.registerTool(
-    'get_issues',
-    {
-      description: 'Retrieve Snyk issues for an organization and repository. Supports filtering by repository name or project ID.',
-      inputSchema: getIssuesInputSchema,
-    },
-    async (args) => {
-      try {
-        const params = {
-          repo: args.repo,
-          status: args.status || 'open',
-          severity: args.severity,
-        };
-        const result = await handleGetIssues(issuesApi, params, projectsApi);
-        return result;
-      } catch (error) {
-        if (error instanceof Error) {
-          throw error;
+  // Register all tools
+  allTools.forEach((tool) => {
+    server.registerTool(
+      tool.name,
+      {
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+      },
+      async (args: any) => {
+        try {
+          return await tool.handler(args, {
+            issuesApi,
+            projectsApi,
+          });
+        } catch (error) {
+          if (error instanceof Error) {
+            throw error;
+          }
+          throw new Error('Unknown error occurred');
         }
-        throw new Error('Unknown error occurred');
       }
-    }
-  );
-
-  // Define input schema for get_issue tool
-  const getIssueInputSchema = z.object({
-    issue_id: z.string().uuid().describe('The unique identifier (UUID) of the issue to retrieve. Must be in UUID format, not an issue key.'),
+    );
   });
-
-  // Register the get_issue tool
-  server.registerTool(
-    'get_issue',
-    {
-      description: 'Retrieve detailed information about a specific Snyk issue by its UUID. Note: This requires the issue UUID (e.g., "4a18d42f-0706-4ad0-b127-24078731fbed"), NOT the issue key (e.g., "SNYK-JAVA-...").',
-      inputSchema: getIssueInputSchema,
-    },
-    async (args) => {
-      try {
-        console.error(`[get_issue] Retrieving issue: ${args.issue_id}`);
-        const params = {
-          issue_id: args.issue_id,
-        };
-        const result = await handleGetIssue(issuesApi, params);
-        console.error(`[get_issue] Successfully retrieved issue: ${args.issue_id}`);
-        return result;
-      } catch (error) {
-        console.error(`[get_issue] Error retrieving issue ${args.issue_id}:`, error);
-        if (error instanceof Error) {
-          throw error;
-        }
-        throw new Error('Unknown error occurred');
-      }
-    }
-  );
 
   return server;
+}
+
+/**
+ * Start MCP Server on stdio transport
+ * This function is called when running as a standalone server
+ */
+export async function startMCPServer() {
+  const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
+  const { config: loadEnv } = await import('dotenv');
+  
+  // Load .env file when running locally
+  loadEnv();
+  
+  const server = createMCPServer();
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error('Snyk MCP Server running on stdio');
+}
+
+// If this file is executed directly (not imported), start the server
+if (require.main === module) {
+  startMCPServer().catch((error) => {
+    console.error('Server error:', error);
+    process.exit(1);
+  });
 }

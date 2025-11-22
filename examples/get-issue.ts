@@ -16,9 +16,8 @@
  *   npx ts-node examples/get-issue.ts 12345678-1234-1234-1234-123456789012
  */
 
-import { spawn } from 'child_process';
-import * as path from 'path';
 import * as dotenv from 'dotenv';
+import { runMCPTool, outputJSON, isValidUUID, exitWithError } from './utils';
 
 dotenv.config();
 
@@ -53,13 +52,10 @@ const issueId = process.argv[2];
 
 // Validate issue_id is provided and is a UUID
 if (!issueId) {
-  console.error('❌ Error: issue_uuid is required\n');
-  showUsage();
+  exitWithError('issue_uuid is required');
 }
 
-// Basic UUID validation (not perfect but catches obvious issues)
-const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-if (!uuidRegex.test(issueId)) {
+if (!isValidUUID(issueId)) {
   console.error('❌ Error: issue_id must be a valid UUID format');
   console.error('   Example: 4a18d42f-0706-4ad0-b127-24078731fbed\n');
   console.error('   You provided:', issueId);
@@ -70,92 +66,19 @@ if (!uuidRegex.test(issueId)) {
 
 console.log(`🔍 Retrieving issue: ${issueId}\n`);
 
-// Test request for get_issue
-const testRequest = {
-  jsonrpc: '2.0',
-  id: 1,
-  method: 'tools/call',
-  params: {
-    name: 'get_issue',
-    arguments: {
-      issue_id: issueId
+// Run the MCP tool
+(async () => {
+  const result = await runMCPTool('get_issue', { issue_id: issueId });
+
+  if (!result.success) {
+    console.error('❌ Error:', result.error);
+    if (result.stderr) {
+      console.error('\n⚠️  Server output (stderr):');
+      console.error(result.stderr);
     }
+    process.exit(1);
   }
-};
 
-console.log('🚀 Starting MCP Server test...\n');
-console.log('📨 Sending request:');
-console.log(JSON.stringify(testRequest, null, 2));
-console.log('\n⏳ Waiting for response...\n');
-
-// Start the MCP server
-const serverPath = path.join(__dirname, '..', 'dist', 'start-mcp-server.js');
-const server = spawn('node', [serverPath], {
-  env: process.env
-});
-
-let responseData = '';
-let errorData = '';
-
-server.stdout.on('data', (data: Buffer) => {
-  responseData += data.toString();
-});
-
-server.stderr.on('data', (data: Buffer) => {
-  const message = data.toString();
-  errorData += message;
-  // Show logs in real-time
-  process.stderr.write(message);
-});
-
-// Send the test request after short delay
-setTimeout(() => {
-  server.stdin.write(JSON.stringify(testRequest) + '\n');
-}, 1000);
-
-// Wait for response
-setTimeout(() => {
-  if (responseData) {
-    console.log('✅ Response received:\n');
-    
-    try {
-      // Parse the MCP response
-      const lines = responseData.trim().split('\n');
-      const lastLine = lines[lines.length - 1];
-      const mcpResponse = JSON.parse(lastLine);
-      
-      // Extract the issue content
-      if (mcpResponse.result?.content?.[0]) {
-        const content = mcpResponse.result.content[0];
-        if (content.type === 'text') {
-          const issueData = JSON.parse(content.text);
-          console.log(JSON.stringify(issueData, null, 2));
-        } else {
-          console.log(JSON.stringify(mcpResponse, null, 2));
-        }
-      } else {
-        console.log(JSON.stringify(mcpResponse, null, 2));
-      }
-    } catch (e) {
-      // Fallback: Show raw response
-      console.log(responseData);
-    }
-  }
-  
-  if (errorData) {
-    console.log('\n⚠️  Server output (stderr):');
-    console.log(errorData);
-  }
-  
-  if (!responseData && !errorData) {
-    console.log('❌ No response received');
-  }
-  
-  server.kill();
-  process.exit(0);
-}, 5000);
-
-server.on('error', (error: Error) => {
-  console.error('❌ Error starting server:', error);
-  process.exit(1);
-});
+  console.log('✅ Response received:\n');
+  outputJSON(result.data);
+})();

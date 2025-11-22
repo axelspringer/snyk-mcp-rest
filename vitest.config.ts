@@ -4,6 +4,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    silent: false,
+    hideSkippedTests: false,
+    onConsoleLog: () => false, // Suppress all console logs
     include: ['tests/**/*.test.ts', 'tests/**/*.spec.ts', 'src/**/*.test.ts', 'src/**/*.spec.ts'],
     exclude: ['node_modules', 'dist', 'src/generated/**'],
     coverage: {
@@ -13,7 +16,7 @@ export default defineConfig({
         'node_modules/**',
         'dist/**',
         'src/generated/**',  // Auto-generated code
-        'src/start-mcp-server.ts', // Standalone server process
+        'src/mcp-server.ts', // Exclude server startup code (if/require.main check)
         '**/*.d.ts',
         '**/*.config.*',
         '**/*.test.ts',

@@ -116,13 +116,57 @@ src/
 │   ├── models/        # TypeScript models/interfaces
 │   └── configuration.ts, base.ts, common.ts
 ├── index.ts           # Entry point - re-exports generated code
+├── mcp-server.ts      # MCP server (business logic + startup script)
+├── tools/             # MCP tool implementations
+│   ├── index.ts       # Tool registry
+│   ├── types.ts       # Tool type definitions
+│   ├── utils.ts       # Shared utilities
+│   ├── get-issues.ts  # get_issues tool
+│   ├── get-issue.ts   # get_issue tool
+│   ├── get-repo-issues.ts  # get_repo_issues tool
+│   └── find-projects.ts    # find_projects tool
 examples/
 ├── basic-usage.ts     # Reference implementation
+├── get-issues.ts      # MCP server testing script
+├── get-issue.ts       # MCP server testing script
+├── get-repo-issues.ts # MCP server testing script
+└── find-projects.ts   # MCP server testing script
 tests/
-├── api.test.ts        # Unit tests
+├── api.test.ts        # API client tests
+├── mcp-server.test.ts # MCP server tests
+├── mcp-server-logic.test.ts # MCP handler functions
+├── mcp-business-logic.test.ts # MCP business logic
+├── integration.test.ts # Integration tests
+├── error-handling.test.ts # Error handling tests
+└── index.test.ts      # Module exports tests
 res/
 ├── snyk-openapi-2025-11-05.json  # Source of truth for API
 ```
+
+## MCP Server Architecture
+
+The MCP (Model Context Protocol) server is implemented in `src/mcp-server.ts` as a single file that combines:
+- Business logic functions (testable)
+- Server startup code (executed when run directly via `require.main === module`)
+
+Key components:
+- **Tool Definitions**: Located in `src/tools/` - each tool implements the `MCPTool` interface with name, description, inputSchema (Zod), and handler
+- **Dynamic Schema Generation**: Tool schemas are assembled from tool definitions using `zodToJsonSchema`
+- **Single Source of Truth**: All tool information (name, description, schema) is defined once in tool files
+
+When adding new tools:
+1. Create a new file in `src/tools/` implementing `MCPTool` interface
+2. Add the tool to `allTools` array in `src/tools/index.ts`
+3. **Create a corresponding example file in `examples/` demonstrating the tool's usage**
+4. The server automatically registers and exposes it
+
+**Example File Requirements:**
+- File naming: `examples/<tool-name>.ts` (matching the tool file name)
+- Must demonstrate real-world usage of the tool
+- Should include error handling
+- Must use environment variables for configuration (API keys, etc.)
+- Include comments explaining key steps
+- Follow the same pattern as existing examples (`get-issues.ts`, `get-issue.ts`, etc.)
 
 ## Environment Variables
 
